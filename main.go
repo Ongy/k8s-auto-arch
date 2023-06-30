@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "mutating-webhook/cmd"
+import "github.com/ongy/k8s-auto-arch/cmd"
 
 func main() {
 	cmd.Execute()

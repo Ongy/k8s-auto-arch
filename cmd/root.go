@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -17,18 +16,17 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 
 	regname "github.com/google/go-containerregistry/pkg/name"
 	registry "github.com/google/go-containerregistry/pkg/v1/remote"
+
+	util "github.com/ongy/k8s-auto-arch/internal/util"
 )
 
 var (
 	tlsCert string
 	tlsKey  string
 	port    int
-	codecs  = serializer.NewCodecFactory(runtime.NewScheme())
 	logger  = log.New(os.Stdout, "http: ", log.LstdFlags)
 )
 
@@ -40,13 +38,9 @@ var rootCmd = &cobra.Command{
 Example:
 $ mutating-webhook --tls-cert <tls_cert> --tls-key <tls_key> --port <port>`,
 	Run: func(cmd *cobra.Command, args []string) {
-		//if tlsCert == "" || tlsKey == "" {
-		//	fmt.Println("--tls-cert and --tls-key required")
-		//	os.Exit(1)
-		//}
-
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+
 		runWebhookServer(ctx, tlsCert, tlsKey)
 	},
 }
@@ -63,27 +57,20 @@ func init() {
 	rootCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on for HTTPS traffic")
 }
 
-func admissionReviewFromRequest(r *http.Request, deserializer runtime.Decoder) (*admissionv1.AdmissionReview, error) {
+func admissionReviewFromRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
 	// Validate that the incoming content type is correct.
 	if r.Header.Get("Content-Type") != "application/json" {
 		return nil, fmt.Errorf("expected application/json content-type")
 	}
 
-	// Get the body data, which will be the AdmissionReview
-	// content for the request.
-	var body []byte
-	if r.Body != nil {
-		requestData, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return nil, err
-		}
-		body = requestData
+	if r.Body == nil {
+		return nil, fmt.Errorf("request had empty body")
 	}
 
 	// Decode the request body into
 	admissionReviewRequest := &admissionv1.AdmissionReview{}
-	if _, _, err := deserializer.Decode(body, nil, admissionReviewRequest); err != nil {
-		return nil, err
+	if err := json.NewDecoder(r.Body).Decode(&admissionReviewRequest); err != nil {
+		return nil, fmt.Errorf("unmarshal admission request: %w", err)
 	}
 
 	return admissionReviewRequest, nil
@@ -124,24 +111,6 @@ func containerArchitectures(refString string) (map[string]bool, error) {
 	return aggregator, nil
 }
 
-func intersect(left map[string]bool, right map[string]bool) map[string]bool {
-	if left == nil {
-		return right
-	}
-	s_intersection := map[string]bool{}
-	if len(left) > len(right) {
-		left, right = right, left // better to iterate over a shorter set
-	}
-
-	for k, _ := range left {
-		if right[k] {
-			s_intersection[k] = true
-		}
-	}
-
-	return s_intersection
-}
-
 func podArchitectures(pod *corev1.Pod) ([]string, error) {
 	var podArches map[string]bool
 	for _, container := range pod.Spec.Containers {
@@ -150,7 +119,7 @@ func podArchitectures(pod *corev1.Pod) ([]string, error) {
 			return []string{}, fmt.Errorf("get arches of container '%s': %w", container.Name, err)
 		}
 
-		podArches = intersect(podArches, arches)
+		podArches = util.Intersect(podArches, arches)
 	}
 
 	for _, container := range pod.Spec.InitContainers {
@@ -159,29 +128,21 @@ func podArchitectures(pod *corev1.Pod) ([]string, error) {
 			return []string{}, fmt.Errorf("get arches of container '%s': %w", container.Name, err)
 		}
 
-		podArches = intersect(podArches, arches)
+		podArches = util.Intersect(podArches, arches)
 	}
 
-	ret := []string{}
-	for key := range podArches {
-		ret = append(ret, key)
-	}
-
-	return ret, nil
+	return util.Keys(podArches), nil
 }
 
 func mutatePod(w http.ResponseWriter, r *http.Request) {
 	logger.Printf("received message on mutate")
 
-	deserializer := codecs.UniversalDeserializer()
-
 	// Parse the AdmissionReview from the http request.
-	admissionReviewRequest, err := admissionReviewFromRequest(r, deserializer)
+	admissionReviewRequest, err := admissionReviewFromRequest(r)
 	if err != nil {
 		msg := fmt.Sprintf("error getting admission review from request: %v", err)
 		logger.Printf(msg)
-		w.WriteHeader(400)
-		w.Write([]byte(msg))
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
@@ -192,19 +153,17 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 	if admissionReviewRequest.Request.Resource != podResource {
 		msg := fmt.Sprintf("did not receive pod, got %s", admissionReviewRequest.Request.Resource.Resource)
 		logger.Printf(msg)
-		w.WriteHeader(400)
-		w.Write([]byte(msg))
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
 	// Decode the pod from the AdmissionReview.
 	rawRequest := admissionReviewRequest.Request.Object.Raw
 	pod := corev1.Pod{}
-	if _, _, err := deserializer.Decode(rawRequest, nil, &pod); err != nil {
+	if err := json.Unmarshal(rawRequest, &pod); err != nil {
 		msg := fmt.Sprintf("error decoding raw pod: %v", err)
 		logger.Printf(msg)
-		w.WriteHeader(500)
-		w.Write([]byte(msg))
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 
@@ -269,8 +228,7 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := fmt.Sprintf("error marshalling response json: %v", err)
 		logger.Printf(msg)
-		w.WriteHeader(500)
-		w.Write([]byte(msg))
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 

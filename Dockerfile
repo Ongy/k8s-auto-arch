@@ -9,4 +9,5 @@ RUN CGO_ENABLED=0 go install \
 FROM scratch
 WORKDIR /
 COPY --from=0 /go/bin/mutating-webhook /
+COPY --from=alpine:latest /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 CMD ["/mutating-webhook"]

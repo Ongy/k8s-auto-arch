@@ -89,39 +89,76 @@ func admissionReviewFromRequest(r *http.Request, deserializer runtime.Decoder) (
 	return admissionReviewRequest, nil
 }
 
-func containerArchitectures(refString string) ([]string, error) {
+func containerArchitectures(refString string) (map[string]bool, error) {
 	ref, err := regname.ParseReference(refString)
 	if err != nil {
-		return []string{}, fmt.Errorf("parse image reference: %w", err)
+		return map[string]bool{}, fmt.Errorf("parse image reference: %w", err)
 	}
 	index, err := registry.Index(ref)
 	if err != nil {
 		image, err := registry.Image(ref)
 		if err != nil {
-			return []string{}, fmt.Errorf("get image: %w", err)
+			return map[string]bool{}, fmt.Errorf("get image: %w", err)
 		}
 
 		imageConfig, err := image.ConfigFile()
 		if err != nil {
-			return []string{}, fmt.Errorf("get imageConfig: %w", err)
+			return map[string]bool{}, fmt.Errorf("get imageConfig: %w", err)
 		}
 
-		return []string{imageConfig.Architecture}, nil
+		return map[string]bool{imageConfig.Architecture: true}, nil
 	}
 
 	manifest, err := index.IndexManifest()
 	if err != nil {
-		return []string{}, fmt.Errorf("get index manifest: %w", err)
+		return map[string]bool{}, fmt.Errorf("get index manifest: %w", err)
 	}
 
 	//TODO: Solve for OS as well!
-	aggregator := []string{}
+	aggregator := map[string]bool{}
 	for _, image := range manifest.Manifests {
 		//aggregator[image.Platform.Architecture] = true
-		aggregator = append(aggregator, image.Platform.Architecture)
+		aggregator[image.Platform.Architecture] = true
 	}
 
 	return aggregator, nil
+}
+
+func intersect(left map[string]bool, right map[string]bool) map[string]bool {
+	if left == nil {
+		return right
+	}
+	s_intersection := map[string]bool{}
+	if len(left) > len(right) {
+		left, right = right, left // better to iterate over a shorter set
+	}
+
+	for k, _ := range left {
+		if right[k] {
+			s_intersection[k] = true
+		}
+	}
+
+	return s_intersection
+}
+
+func podArchitectures(pod *corev1.Pod) ([]string, error) {
+	var podArches map[string]bool
+	for _, container := range pod.Spec.Containers {
+		arches, err := containerArchitectures(container.Image)
+		if err != nil {
+			return []string{}, fmt.Errorf("get arches of container '%s': %w", container.Name, err)
+		}
+
+		podArches = intersect(podArches, arches)
+	}
+
+	ret := []string{}
+	for key := range podArches {
+		ret = append(ret, key)
+	}
+
+	return ret, nil
 }
 
 func mutatePod(w http.ResponseWriter, r *http.Request) {
@@ -173,39 +210,36 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if pod.Spec.Affinity == nil {
+		podArches, err := podArchitectures(&pod)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get pod architectures: %v\n", err)
+			http.Error(w, fmt.Errorf("pod architectures: %w", err).Error(), http.StatusInternalServerError)
+			return
+		}
 
-		for _, container := range pod.Spec.Containers {
-			arches, err := containerArchitectures(container.Image)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to get contianer images for %v: %v\n", container.Name, err)
-			} else {
-				fmt.Printf("Looking at container: %v: %v\n", container.Name, arches)
-			}
-
-			affinity := corev1.Affinity{
-				NodeAffinity: &corev1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-						NodeSelectorTerms: []corev1.NodeSelectorTerm{
-							{
-								MatchExpressions: []corev1.NodeSelectorRequirement{
-									{
-										Key:      "kubernetes.io/arch",
-										Operator: "In",
-										Values:   arches,
-									},
+		affinity := corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "kubernetes.io/arch",
+									Operator: "In",
+									Values:   podArches,
 								},
 							},
 						},
 					},
 				},
-			}
-			affinityStr, err := json.Marshal(map[string]interface{}{"op": "add", "path": "/spec/affinity", "value": affinity})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to marshal affinity: %v\n", err)
-			}
-			patch = fmt.Sprintf(`[%s]`, affinityStr)
-			fmt.Printf("Patching with: %s\n", patch)
+			},
 		}
+
+		affinityStr, err := json.Marshal(map[string]interface{}{"op": "add", "path": "/spec/affinity", "value": affinity})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to marshal affinity: %v\n", err)
+		}
+		patch = fmt.Sprintf(`[%s]`, affinityStr)
 	} else {
 		fmt.Printf("Skipping pod with pre-set affinity!\n")
 	}
@@ -231,7 +265,6 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("%s\n", resp)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
 }

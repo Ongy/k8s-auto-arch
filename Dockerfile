@@ -4,7 +4,7 @@ RUN mkdir -p /go/src/github.com/ongy/k8s-auto-arch
 ADD . /go/src/github.com/ongy/k8s-auto-arch
 WORKDIR /go/src/github.com/ongy/k8s-auto-arch
 RUN CGO_ENABLED=0 go install \
-    -ldflags="-w -s -X main.gitDescribe=$(git -C /go/src/github.com/ongy/k8s-auto-arch/ describe --always --long --dirty)" 
+    -ldflags="-w -s -X github.com/ongy/k8s-auto-arch/cmd.gitDescribe=$(git -C /go/src/github.com/ongy/k8s-auto-arch/ describe --always --long --dirty)" 
 
 FROM scratch
 WORKDIR /

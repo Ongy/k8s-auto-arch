@@ -24,6 +24,8 @@ import (
 )
 
 var (
+	gitDescribe string
+
 	tlsCert string
 	tlsKey  string
 	port    int
@@ -37,11 +39,14 @@ var rootCmd = &cobra.Command{
 
 Example:
 $ mutating-webhook --tls-cert <tls_cert> --tls-key <tls_key> --port <port>`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		runWebhookServer(ctx, tlsCert, tlsKey)
+		return runWebhookServer(ctx, tlsCert, tlsKey)
+	},
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("Running k8s-auto-arch version %s\n", gitDescribe)
 	},
 }
 
@@ -236,7 +241,7 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func runWebhookServer(ctx context.Context, certFile, keyFile string) {
+func runWebhookServer(ctx context.Context, certFile, keyFile string) error {
 	//cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	//if err != nil {
 	//	panic(err)
@@ -262,7 +267,9 @@ func runWebhookServer(ctx context.Context, certFile, keyFile string) {
 
 	if err := server.ListenAndServe(); err != nil {
 		if !errors.Is(err, http.ErrServerClosed) {
-			fmt.Fprintf(os.Stderr, "Server closed with error: %v\n", err)
+			return fmt.Errorf("ListenAndServe: %w", err)
 		}
 	}
+
+	return nil
 }

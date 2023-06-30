@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/google/go-containerregistry v0.15.2
 	github.com/spf13/cobra v1.7.0
+	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	k8s.io/api v0.22.3
 	k8s.io/apimachinery v0.22.3
 )

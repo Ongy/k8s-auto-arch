@@ -1,25 +1,25 @@
 package util
 
-func Intersect(left map[string]bool, right map[string]bool) map[string]bool {
+func Intersect[T any](left map[string]T, right map[string]T) map[string]T {
 	if left == nil {
 		return right
 	}
-	s_intersection := map[string]bool{}
+	s_intersection := map[string]T{}
 	if len(left) > len(right) {
 		left, right = right, left // better to iterate over a shorter set
 	}
 
 	for k, _ := range left {
-		if right[k] {
-			s_intersection[k] = true
+		if val, ok := right[k]; ok {
+			s_intersection[k] = val
 		}
 	}
 
 	return s_intersection
 }
 
-func Keys(dict map[string]bool) []string {
-	ret := make([]string, len(dict))
+func Keys[T any](dict map[string]T) []string {
+	ret := []string{}
 	for key := range dict {
 		ret = append(ret, key)
 	}

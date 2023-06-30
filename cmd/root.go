@@ -242,18 +242,11 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 }
 
 func runWebhookServer(ctx context.Context, certFile, keyFile string) error {
-	//cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	//if err != nil {
-	//	panic(err)
-	//}
 
 	fmt.Println("Starting webhook server")
 	http.HandleFunc("/", mutatePod)
 	server := http.Server{
-		Addr: fmt.Sprintf(":%d", port),
-		//		TLSConfig: &tls.Config{
-		//			Certificates: []tls.Certificate{cert},
-		//		},
+		Addr:     fmt.Sprintf(":%d", port),
 		ErrorLog: logger,
 	}
 

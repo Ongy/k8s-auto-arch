@@ -1,13 +1,16 @@
 package cmd
 
 import (
-	"crypto/tls"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -16,6 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+
+	regname "github.com/google/go-containerregistry/pkg/name"
+	registry "github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 var (
@@ -34,11 +40,14 @@ var rootCmd = &cobra.Command{
 Example:
 $ mutating-webhook --tls-cert <tls_cert> --tls-key <tls_key> --port <port>`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if tlsCert == "" || tlsKey == "" {
-			fmt.Println("--tls-cert and --tls-key required")
-			os.Exit(1)
-		}
-		runWebhookServer(tlsCert, tlsKey)
+		//if tlsCert == "" || tlsKey == "" {
+		//	fmt.Println("--tls-cert and --tls-key required")
+		//	os.Exit(1)
+		//}
+
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		runWebhookServer(ctx, tlsCert, tlsKey)
 	},
 }
 
@@ -51,7 +60,7 @@ func Execute() {
 func init() {
 	rootCmd.Flags().StringVar(&tlsCert, "tls-cert", "", "Certificate for TLS")
 	rootCmd.Flags().StringVar(&tlsKey, "tls-key", "", "Private key file for TLS")
-	rootCmd.Flags().IntVar(&port, "port", 443, "Port to listen on for HTTPS traffic")
+	rootCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on for HTTPS traffic")
 }
 
 func admissionReviewFromRequest(r *http.Request, deserializer runtime.Decoder) (*admissionv1.AdmissionReview, error) {
@@ -78,6 +87,41 @@ func admissionReviewFromRequest(r *http.Request, deserializer runtime.Decoder) (
 	}
 
 	return admissionReviewRequest, nil
+}
+
+func containerArchitectures(refString string) ([]string, error) {
+	ref, err := regname.ParseReference(refString)
+	if err != nil {
+		return []string{}, fmt.Errorf("parse image reference: %w", err)
+	}
+	index, err := registry.Index(ref)
+	if err != nil {
+		image, err := registry.Image(ref)
+		if err != nil {
+			return []string{}, fmt.Errorf("get image: %w", err)
+		}
+
+		imageConfig, err := image.ConfigFile()
+		if err != nil {
+			return []string{}, fmt.Errorf("get imageConfig: %w", err)
+		}
+
+		return []string{imageConfig.Architecture}, nil
+	}
+
+	manifest, err := index.IndexManifest()
+	if err != nil {
+		return []string{}, fmt.Errorf("get index manifest: %w", err)
+	}
+
+	//TODO: Solve for OS as well!
+	aggregator := []string{}
+	for _, image := range manifest.Manifests {
+		//aggregator[image.Platform.Architecture] = true
+		aggregator = append(aggregator, image.Platform.Architecture)
+	}
+
+	return aggregator, nil
 }
 
 func mutatePod(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +169,45 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 	var patch string
 	patchType := v1.PatchTypeJSONPatch
 	if _, ok := pod.Labels["hello"]; !ok {
-		patch = `[{"op":"add","path":"/metadata/labels","value":{"hello":"world"}}]`
+		patch = `[{"op":"add","path":"/metadata/labels/hello","value":"world"}]`
+	}
+
+	if pod.Spec.Affinity == nil {
+
+		for _, container := range pod.Spec.Containers {
+			arches, err := containerArchitectures(container.Image)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to get contianer images for %v: %v\n", container.Name, err)
+			} else {
+				fmt.Printf("Looking at container: %v: %v\n", container.Name, arches)
+			}
+
+			affinity := corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{
+							{
+								MatchExpressions: []corev1.NodeSelectorRequirement{
+									{
+										Key:      "kubernetes.io/arch",
+										Operator: "In",
+										Values:   arches,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			affinityStr, err := json.Marshal(map[string]interface{}{"op": "add", "path": "/spec/affinity", "value": affinity})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to marshal affinity: %v\n", err)
+			}
+			patch = fmt.Sprintf(`[%s]`, affinityStr)
+			fmt.Printf("Patching with: %s\n", patch)
+		}
+	} else {
+		fmt.Printf("Skipping pod with pre-set affinity!\n")
 	}
 
 	admissionResponse.Allowed = true
@@ -149,27 +231,38 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Printf("%s\n", resp)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
 }
 
-func runWebhookServer(certFile, keyFile string) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		panic(err)
-	}
+func runWebhookServer(ctx context.Context, certFile, keyFile string) {
+	//cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	//if err != nil {
+	//	panic(err)
+	//}
 
 	fmt.Println("Starting webhook server")
-	http.HandleFunc("/mutate", mutatePod)
+	http.HandleFunc("/", mutatePod)
 	server := http.Server{
 		Addr: fmt.Sprintf(":%d", port),
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		},
+		//		TLSConfig: &tls.Config{
+		//			Certificates: []tls.Certificate{cert},
+		//		},
 		ErrorLog: logger,
 	}
 
-	if err := server.ListenAndServeTLS("", ""); err != nil {
-		panic(err)
+	go func() {
+		<-ctx.Done()
+
+		if err := server.Shutdown(context.Background()); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to shutdown server: %v\n", err)
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != nil {
+		if !errors.Is(err, http.ErrServerClosed) {
+			fmt.Fprintf(os.Stderr, "Server closed with error: %v\n", err)
+		}
 	}
 }

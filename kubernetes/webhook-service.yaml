@@ -1,10 +1,22 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: mutating-webhook
+  name: k8s-auto-arch
 spec:
   selector:
-    app: mutating-webhook
+    app: k8s-auto-arch
   ports:
-    - port: 443
-      targetPort: 443
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: librespeed
+spec:
+  gateways: [istio-system/gateway]
+  hosts: [mutate.local.ongy.net]
+  http:
+  - route:
+    - destination:
+        host: k8s-auto-arch.default.svc.cluster.local

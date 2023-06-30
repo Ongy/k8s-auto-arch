@@ -19,7 +19,7 @@ func Intersect[T any](left map[string]T, right map[string]T) map[string]T {
 }
 
 func Keys[T any](dict map[string]T) []string {
-	ret := []string{}
+	ret := make([]string, 0, len(dict))
 	for key := range dict {
 		ret = append(ret, key)
 	}

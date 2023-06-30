@@ -153,6 +153,15 @@ func podArchitectures(pod *corev1.Pod) ([]string, error) {
 		podArches = intersect(podArches, arches)
 	}
 
+	for _, container := range pod.Spec.InitContainers {
+		arches, err := containerArchitectures(container.Image)
+		if err != nil {
+			return []string{}, fmt.Errorf("get arches of container '%s': %w", container.Name, err)
+		}
+
+		podArches = intersect(podArches, arches)
+	}
+
 	ret := []string{}
 	for key := range podArches {
 		ret = append(ret, key)

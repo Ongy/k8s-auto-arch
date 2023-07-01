@@ -13,11 +13,9 @@ import (
 
 	"github.com/spf13/cobra"
 	admissionv1 "k8s.io/api/admission/v1"
-	v1 "k8s.io/api/admission/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/ongy/k8s-auto-arch/internal/resources"
+	"github.com/ongy/k8s-auto-arch/internal/controller"
 )
 
 var (
@@ -101,65 +99,11 @@ func mutatePod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode the pod from the AdmissionReview.
-	rawRequest := admissionReviewRequest.Request.Object.Raw
-	pod := corev1.Pod{}
-	if err := json.Unmarshal(rawRequest, &pod); err != nil {
-		msg := fmt.Sprintf("error decoding raw pod: %v", err)
-		logger.Printf(msg)
-		http.Error(w, msg, http.StatusInternalServerError)
+	admissionResponse, err := controller.ReviewPod(admissionReviewRequest.Request)
+	if err != nil {
+		logger.Printf("Get admission response: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	// Create a response that will add a label to the pod if it does
-	// not already have a label with the key of "hello". In this case
-	// it does not matter what the value is, as long as the key exists.
-	admissionResponse := &admissionv1.AdmissionResponse{}
-	var patch string
-	patchType := v1.PatchTypeJSONPatch
-	if _, ok := pod.Labels["hello"]; !ok {
-		patch = `[{"op":"add","path":"/metadata/labels/hello","value":"world"}]`
-	}
-
-	if pod.Spec.Affinity == nil {
-		podArches, err := resources.Architectures(&pod)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to get pod architectures: %v\n", err)
-			http.Error(w, fmt.Errorf("pod architectures: %w", err).Error(), http.StatusInternalServerError)
-			return
-		}
-
-		affinity := corev1.Affinity{
-			NodeAffinity: &corev1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					NodeSelectorTerms: []corev1.NodeSelectorTerm{
-						{
-							MatchExpressions: []corev1.NodeSelectorRequirement{
-								{
-									Key:      "kubernetes.io/arch",
-									Operator: "In",
-									Values:   podArches,
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		affinityStr, err := json.Marshal(map[string]interface{}{"op": "add", "path": "/spec/affinity", "value": affinity})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to marshal affinity: %v\n", err)
-		}
-		patch = fmt.Sprintf(`[%s]`, affinityStr)
-	} else {
-		fmt.Printf("Skipping pod with pre-set affinity!\n")
-	}
-
-	admissionResponse.Allowed = true
-	if patch != "" {
-		admissionResponse.PatchType = &patchType
-		admissionResponse.Patch = []byte(patch)
 	}
 
 	// Construct the response, which is just another AdmissionReview.

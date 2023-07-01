@@ -141,13 +141,13 @@ func makeSingleInfos(architecture, org, image string) []fileInfo {
 	return []fileInfo{config, manifest}
 }
 
-func makeInfos(architecture2 []string, org, image string) []fileInfo {
-	if len(architecture2) == 1 {
-		return makeSingleInfos(architecture2[0], org, image)
+func makeInfos(architectures []string, org, image string) []fileInfo {
+	if len(architectures) == 1 {
+		return makeSingleInfos(architectures[0], org, image)
 	}
 
 	manifests := []registryv1.Descriptor{}
-	for _, arch := range architecture2 {
+	for _, arch := range architectures {
 		manifests = append(manifests, registryv1.Descriptor{
 			Digest: registryv1.Hash{
 				Algorithm: "sha256",

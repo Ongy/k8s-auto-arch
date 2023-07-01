@@ -141,6 +141,40 @@ func makeSingleInfos(architecture, org, image string) []fileInfo {
 	return []fileInfo{config, manifest}
 }
 
+func makeInfos(architecture2 []string, org, image string) []fileInfo {
+	if len(architecture2) == 1 {
+		return makeSingleInfos(architecture2[0], org, image)
+	}
+
+	manifests := []registryv1.Descriptor{}
+	for _, arch := range architecture2 {
+		manifests = append(manifests, registryv1.Descriptor{
+			Digest: registryv1.Hash{
+				Algorithm: "sha256",
+				Hex:       "0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			MediaType: "application/vnd.oci.image.manifest.v1+json",
+			Platform: &registryv1.Platform{
+				Architecture: arch,
+			},
+		})
+	}
+	manifest := registryv1.IndexManifest{
+		SchemaVersion: 2,
+		MediaType:     "application/vnd.oci.image.index.v1+json",
+		Manifests:     manifests,
+	}
+
+	content, _ := json.Marshal(manifest)
+	return []fileInfo{
+		{
+			path:        fmt.Sprintf("/v2/%s/%s/manifests/latest", org, image),
+			content:     content,
+			contentType: "application/vnd.oci.image.index.v1+json",
+		},
+	}
+}
+
 type testTripper struct {
 	files []fileInfo
 }
@@ -186,11 +220,16 @@ func TestContainerArchitectures(t *testing.T) {
 			input:    "registry.local/org/image",
 			expected: []string{"amd64"},
 		},
+		{
+			name:     "multi",
+			input:    "registry.local/org/image",
+			expected: []string{"amd64", "arm64"},
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			registry.DefaultTransport = &testTripper{makeSingleInfos(testCase.expected[0], "org", "image")}
+			registry.DefaultTransport = &testTripper{makeInfos(testCase.expected, "org", "image")}
 			arches, err := containerArchitectures(testCase.input)
 			if err != nil {
 				t.Fatalf("Failed to get container architectures: %v", err)

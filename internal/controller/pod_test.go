@@ -199,15 +199,45 @@ func TestHandlePod(t *testing.T) {
 }
 
 func TestReviewPod(t *testing.T) {
+	patchType := admissionv1.PatchTypeJSONPatch
 	testCases := []struct {
 		name     string
-		arches   []string
-		input    admissionv1.AdmissionRequest
-		expected admissionv1.AdmissionResponse
-	}{}
+		patch    string
+		expected *admissionv1.AdmissionResponse
+	}{
+		{
+			name:  "nopatch",
+			patch: "",
+			expected: &admissionv1.AdmissionResponse{
+				Allowed: true,
+			},
+		},
+		{
+			name:  "patch",
+			patch: "patch",
+			expected: &admissionv1.AdmissionResponse{
+				Patch:     []byte("patch"),
+				PatchType: &patchType,
+				Allowed:   true,
+			},
+		},
+	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			doHandlePod = func(pod *v1.Pod) (string, error) { return testCase.patch, nil }
+			request := admissionv1.AdmissionRequest{}
+
+			request.Object.Raw = []byte("{}")
+
+			got, err := ReviewPod(&request)
+			if err != nil {
+				t.Fatalf("Failed to review pod: %v", err)
+			}
+
+			if !reflect.DeepEqual(got, testCase.expected) {
+				t.Fatalf("got != want: %v != %v", got, testCase.expected)
+			}
 		})
 	}
 }

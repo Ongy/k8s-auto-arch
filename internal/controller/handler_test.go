@@ -180,6 +180,96 @@ func TestHandleRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:   "intersect",
+			arches: map[test.ImageInfo][]string{{Organization: "org", Image: "image"}: {"amd64"}, {Organization: "org", Image: "image2"}: {"amd64", "arm64"}},
+			input: v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "registry.local/org/image:latest",
+						},
+						{
+							Image: "registry.local/org/image2:latest",
+						},
+					},
+				},
+			},
+			expected: v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "registry.local/org/image:latest",
+						},
+						{
+							Image: "registry.local/org/image2:latest",
+						},
+					},
+					Affinity: &v1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/arch",
+												Operator: "In",
+												Values:   []string{"amd64"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:   "multi",
+			arches: map[test.ImageInfo][]string{{Organization: "org", Image: "image"}: {"amd64", "arm64"}, {Organization: "org", Image: "image2"}: {"amd64", "arm64"}},
+			input: v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "registry.local/org/image:latest",
+						},
+						{
+							Image: "registry.local/org/image2:latest",
+						},
+					},
+				},
+			},
+			expected: v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "registry.local/org/image:latest",
+						},
+						{
+							Image: "registry.local/org/image2:latest",
+						},
+					},
+					Affinity: &v1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/arch",
+												Operator: "In",
+												Values:   []string{"amd64", "arm64"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, testCase := range testCases {

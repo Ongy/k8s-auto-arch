@@ -138,7 +138,12 @@ type ImageInfo struct {
 	Image        string
 }
 
-func UseTestRegistry(arches []string, image ImageInfo) {
-	registry.DefaultTransport = &testTripper{makeInfos(arches, image.Organization, image.Image)}
+func UseTestRegistry(images map[ImageInfo][]string) {
+	files := []fileInfo{}
+	for k, v := range images {
+		files = append(files, makeInfos(v, k.Organization, k.Image)...)
+	}
+
+	registry.DefaultTransport = &testTripper{files}
 
 }

@@ -31,7 +31,7 @@ func TestContainerArchitectures(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			test.UseTestRegistry(testCase.expected, test.ImageInfo{"org", "image"})
+			test.UseTestRegistry(map[test.ImageInfo][]string{{Organization: "org", Image: "image"}: testCase.expected})
 			arches, err := containerArchitectures(testCase.input)
 			if err != nil {
 				t.Fatalf("Failed to get container architectures: %v", err)

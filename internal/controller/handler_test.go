@@ -184,9 +184,7 @@ func TestHandleRequest(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			for k, v := range testCase.arches {
-				test.UseTestRegistry(v, k)
-			}
+			test.UseTestRegistry(testCase.arches)
 			recorder := httptest.NewRecorder()
 			request := makeHttpRequest(&testCase.input)
 

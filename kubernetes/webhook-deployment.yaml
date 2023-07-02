@@ -14,6 +14,11 @@ spec:
     spec:
       containers:
         - name: mutating-webhook
+          command:
+          - /k8s-auto-arch
+          args:
+          - --logtostderr=true
+          - -v=3
           image: cr.local.ongy.net/ongy/k8s-auto-arch:latest
           imagePullPolicy: Always
           ports:

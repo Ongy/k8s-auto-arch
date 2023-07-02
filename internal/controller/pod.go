@@ -8,6 +8,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 
 	"github.com/ongy/k8s-auto-arch/internal/resources"
 )
@@ -15,7 +16,7 @@ import (
 var (
 	// Indirection for testing
 	doArchitectures = resources.Architectures
-	doHandlePod = handlePod
+	doHandlePod     = handlePod
 )
 
 func podAffinity(pod *corev1.Pod) (*corev1.Affinity, error) {
@@ -82,6 +83,9 @@ func ReviewPod(request *v1.AdmissionRequest) (*admissionv1.AdmissionResponse, er
 	if patch != "" {
 		admissionResponse.PatchType = &patchType
 		admissionResponse.Patch = []byte(patch)
+		klog.V(3).InfoS("Annotating pod", "pod", pod.Name)
+	} else {
+		klog.V(4).InfoS("Skipping pod", "pod", pod.Name)
 	}
 
 	return admissionResponse, nil

@@ -7,6 +7,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 )
 
 func admissionReviewFromRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
@@ -29,6 +30,7 @@ func admissionReviewFromRequest(r *http.Request) (*admissionv1.AdmissionReview, 
 }
 
 func HandleRequest(w http.ResponseWriter, r *http.Request) {
+	klog.V(4).InfoS("Handling request", "client", r.RemoteAddr)
 	// Parse the AdmissionReview from the http request.
 	admissionReviewRequest, err := admissionReviewFromRequest(r)
 	if err != nil {
@@ -42,13 +44,15 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// we should verify here before continuing.
 	podResource := metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 	if admissionReviewRequest.Request.Resource != podResource {
-		msg := fmt.Sprintf("did not receive pod, got %s", admissionReviewRequest.Request.Resource.Resource)
-		http.Error(w, msg, http.StatusBadRequest)
+		// While this isn't a big problem for the application, it's a warning level report of misconfiguration
+		klog.V(2).InfoS("Got incompatible resource", "client", r.RemoteAddr, "resource", admissionReviewRequest.Request.Resource)
+		http.Error(w, "Incompatible resource", http.StatusBadRequest)
 		return
 	}
 
 	admissionResponse, err := ReviewPod(admissionReviewRequest.Request)
 	if err != nil {
+		klog.V(2).InfoS("Failed to review resource", "err", err, "client", r.RemoteAddr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

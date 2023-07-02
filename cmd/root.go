@@ -4,40 +4,42 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"github.com/ongy/k8s-auto-arch/internal/controller"
+	"github.com/spf13/cobra"
+
+	goflags "flag"
+
+	"k8s.io/klog/v2"
 )
 
 var (
 	gitDescribe string
 
-	tlsCert string
-	tlsKey  string
-	port    int
-	logger  = log.New(os.Stdout, "http: ", log.LstdFlags)
+	port int
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "mutating-webhook",
-	Short: "Kubernetes mutating webhook example",
-	Long: `Example showing how to implement a basic mutating webhook in Kubernetes.
-
-Example:
-$ mutating-webhook --tls-cert <tls_cert> --tls-key <tls_key> --port <port>`,
+	Use:   "k8s-auto-arch",
+	Short: "Kubernetes auto architecture assignment",
+	Long: `Small webhook service that allows to automatically inject architecture node affinity.
+	
+	This is useful when when you have a mixed architecture cluster but cannot guarantee that every container is available in all arches.
+	When this is used as mutating webhook, it will automatically download the container manifests and check for compatible platforms.
+	
+	When the pod already has an affinity configured, it's not updated.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		return runWebhookServer(ctx, tlsCert, tlsKey)
+		return runWebhookServer(ctx)
 	},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Running k8s-auto-arch version %s\n", gitDescribe)
+		klog.V(3).InfoS("Starting k8s-auto-arch", "version", gitDescribe)
 	},
 }
 
@@ -48,25 +50,25 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&tlsCert, "tls-cert", "", "Certificate for TLS")
-	rootCmd.Flags().StringVar(&tlsKey, "tls-key", "", "Private key file for TLS")
+	fs := goflags.NewFlagSet("", goflags.PanicOnError)
+	klog.InitFlags(fs)
+	rootCmd.PersistentFlags().AddGoFlagSet(fs)
+
 	rootCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on for HTTPS traffic")
 }
 
-func runWebhookServer(ctx context.Context, certFile, keyFile string) error {
-
-	fmt.Println("Starting webhook server")
+func runWebhookServer(ctx context.Context) error {
 	http.HandleFunc("/", controller.HandleRequest)
 	server := http.Server{
 		Addr:     fmt.Sprintf(":%d", port),
-		ErrorLog: logger,
+		ErrorLog: klog.NewStandardLogger("ERROR"),
 	}
 
 	go func() {
 		<-ctx.Done()
 
 		if err := server.Shutdown(context.Background()); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to shutdown server: %v\n", err)
+			klog.V(2).InfoS("Failed to shutdown server", "err", err, "port", port)
 		}
 	}()
 

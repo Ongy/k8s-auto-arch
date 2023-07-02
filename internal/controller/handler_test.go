@@ -290,8 +290,13 @@ func TestHandleRequest(t *testing.T) {
 				t.Fatalf("Failed to handle response: %v", err)
 			}
 
-			if !reflect.DeepEqual(got, &testCase.expected) {
-				t.Errorf("got != want: %v != %v", got, testCase.expected)
+			// Not requred in IDE, but test failed in container builder
+			var want v1.Pod
+			wantString, _ := json.Marshal(testCase.expected)
+			json.Unmarshal(wantString, &want)
+
+			if !reflect.DeepEqual(got, &want) {
+				t.Errorf("got != want:\n%v\n!=\n%v", got, testCase.expected)
 			}
 		})
 	}

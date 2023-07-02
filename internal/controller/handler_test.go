@@ -55,6 +55,10 @@ func handleResponse(res *http.Response, pod *v1.Pod) (*v1.Pod, error) {
 		return nil, fmt.Errorf("decode review: %w", err)
 	}
 
+	if admissinoReview.Response.PatchType == nil {
+		return pod, nil
+	}
+
 	patch, err := jsonpatch.DecodePatch(admissinoReview.Response.Patch)
 	if err != nil {
 		return nil, fmt.Errorf("decode patch: %w", err)
@@ -110,6 +114,62 @@ func TestHandleRequest(t *testing.T) {
 												Key:      "kubernetes.io/arch",
 												Operator: "In",
 												Values:   []string{"amd64"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:   "skip",
+			arches: map[test.ImageInfo][]string{test.ImageInfo{"org", "image"}: {"amd64"}},
+			input: v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "registry.local/org/image:latest",
+						},
+					},
+					Affinity: &v1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/other",
+												Operator: "In",
+												Values:   []string{"sample"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "registry.local/org/image:latest",
+						},
+					},
+					Affinity: &v1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/other",
+												Operator: "In",
+												Values:   []string{"sample"},
 											},
 										},
 									},

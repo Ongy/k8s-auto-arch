@@ -3,6 +3,7 @@ module github.com/ongy/k8s-auto-arch
 go 1.19
 
 require (
+	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/google/go-containerregistry v0.15.2
 	github.com/spf13/cobra v1.7.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df

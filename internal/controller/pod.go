@@ -83,9 +83,9 @@ func ReviewPod(request *v1.AdmissionRequest) (*admissionv1.AdmissionResponse, er
 	if patch != "" {
 		admissionResponse.PatchType = &patchType
 		admissionResponse.Patch = []byte(patch)
-		klog.V(3).InfoS("Annotating pod", "pod", pod.Name)
+		klog.V(3).InfoS("Annotating pod")
 	} else {
-		klog.V(4).InfoS("Skipping pod", "pod", pod.Name)
+		klog.V(4).InfoS("Skipping pod")
 	}
 
 	return admissionResponse, nil

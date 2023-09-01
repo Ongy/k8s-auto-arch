@@ -54,7 +54,7 @@ func handlePod(ctx context.Context, pod *corev1.Pod) (string, error) {
 	defer span.End()
 
 	if pod.Spec.Affinity == nil {
-		affinity, err := podAffinity(context.Background(), pod)
+		affinity, err := podAffinity(ctx, pod)
 		if err != nil {
 			return "", fmt.Errorf("get pod affinity: %w", err)
 		}

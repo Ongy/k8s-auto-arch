@@ -79,5 +79,7 @@ func Architectures(ctx context.Context, pod *corev1.Pod) ([]string, error) {
 		podArches = util.Intersect(podArches, arches)
 	}
 
-	return util.Keys(podArches), nil
+	ret := util.Keys(podArches)
+	span.SetAttributes(attribute.StringSlice("arches", ret))
+	return ret, nil
 }

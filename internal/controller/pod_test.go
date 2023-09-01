@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -81,11 +82,11 @@ func TestPodAffinity(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			doArchitectures = func(pod *v1.Pod) ([]string, error) {
+			doArchitectures = func(context.Context, *v1.Pod) ([]string, error) {
 				return testCase.arches, nil
 			}
 
-			got, err := podAffinity(&testCase.input)
+			got, err := podAffinity(context.Background(), &testCase.input)
 			if err != nil {
 				t.Fatalf("Get pod affinity: %v", err)
 			}
@@ -153,11 +154,11 @@ func TestHandlePod(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			doArchitectures = func(pod *v1.Pod) ([]string, error) {
+			doArchitectures = func(context.Context, *v1.Pod) ([]string, error) {
 				return testCase.arches, nil
 			}
 
-			got, err := handlePod(&testCase.input)
+			got, err := handlePod(context.Background(), &testCase.input)
 			if err != nil {
 				t.Fatalf("Get pod affinity: %v", err)
 			}
@@ -225,12 +226,12 @@ func TestReviewPod(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			doHandlePod = func(pod *v1.Pod) (string, error) { return testCase.patch, nil }
+			doHandlePod = func(context.Context, *v1.Pod) (string, error) { return testCase.patch, nil }
 			request := admissionv1.AdmissionRequest{}
 
 			request.Object.Raw = []byte("{}")
 
-			got, err := ReviewPod(&request)
+			got, err := ReviewPod(context.Background(), &request)
 			if err != nil {
 				t.Fatalf("Failed to review pod: %v", err)
 			}

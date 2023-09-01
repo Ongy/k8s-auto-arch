@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
 
 func admissionReviewFromRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
+	_, span := otel.Tracer("").Start(r.Context(), "admissionReviewFromRequest")
+	defer span.End()
+
 	// Validate that the incoming content type is correct.
 	if r.Header.Get("Content-Type") != "application/json" {
 		return nil, fmt.Errorf("expected application/json content-type")
@@ -50,7 +54,7 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	admissionResponse, err := ReviewPod(admissionReviewRequest.Request)
+	admissionResponse, err := ReviewPod(r.Context(), admissionReviewRequest.Request)
 	if err != nil {
 		klog.V(2).InfoS("Failed to review resource", "err", err, "client", r.RemoteAddr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

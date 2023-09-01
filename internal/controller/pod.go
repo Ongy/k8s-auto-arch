@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 
+	"go.opentelemetry.io/otel"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,8 +21,11 @@ var (
 	doHandlePod     = handlePod
 )
 
-func podAffinity(pod *corev1.Pod) (*corev1.Affinity, error) {
-	podArches, err := doArchitectures(pod)
+func podAffinity(ctx context.Context, pod *corev1.Pod) (*corev1.Affinity, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "podAffinity")
+	defer span.End()
+
+	podArches, err := doArchitectures(ctx, pod)
 	if err != nil {
 		return nil, fmt.Errorf("get pod architectures: %w", err)
 	}
@@ -44,9 +49,12 @@ func podAffinity(pod *corev1.Pod) (*corev1.Affinity, error) {
 	}, nil
 }
 
-func handlePod(pod *corev1.Pod) (string, error) {
+func handlePod(ctx context.Context, pod *corev1.Pod) (string, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "handlePod")
+	defer span.End()
+
 	if pod.Spec.Affinity == nil {
-		affinity, err := podAffinity(pod)
+		affinity, err := podAffinity(context.Background(), pod)
 		if err != nil {
 			return "", fmt.Errorf("get pod affinity: %w", err)
 		}
@@ -61,7 +69,10 @@ func handlePod(pod *corev1.Pod) (string, error) {
 	return "", nil
 }
 
-func ReviewPod(request *v1.AdmissionRequest) (*admissionv1.AdmissionResponse, error) {
+func ReviewPod(ctx context.Context, request *v1.AdmissionRequest) (*admissionv1.AdmissionResponse, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "ReviewPod")
+	defer span.End()
+
 	rawRequest := request.Object.Raw
 	pod := corev1.Pod{}
 	if err := json.Unmarshal(rawRequest, &pod); err != nil {
@@ -74,7 +85,7 @@ func ReviewPod(request *v1.AdmissionRequest) (*admissionv1.AdmissionResponse, er
 	admissionResponse := &admissionv1.AdmissionResponse{}
 	patchType := v1.PatchTypeJSONPatch
 
-	patch, err := doHandlePod(&pod)
+	patch, err := doHandlePod(ctx, &pod)
 	if err != nil {
 		return nil, fmt.Errorf("get pod patch: %w", err)
 	}

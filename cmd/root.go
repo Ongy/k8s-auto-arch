@@ -4,24 +4,85 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/ongy/k8s-auto-arch/internal/controller"
-	"github.com/spf13/cobra"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	goflags "flag"
+
+	"github.com/spf13/cobra"
 
 	"k8s.io/klog/v2"
 )
 
+const serviceName = "ks-auto-arch.ongy.net"
+
 var (
-	gitDescribe string
+	gitDescribe  string
+	collectorURL = ""
 
 	port int
 )
+
+func initTracer() func(context.Context) error {
+	if collectorURL == "" {
+		return func(context.Context) error { return nil }
+	}
+
+	exporter, err := otlptrace.New(
+		context.Background(),
+		otlptracegrpc.NewClient(
+			otlptracegrpc.WithInsecure(),
+			otlptracegrpc.WithEndpoint(collectorURL),
+		),
+	)
+
+	if err != nil {
+		log.Fatalf("Failed to create exporter: %v", err)
+	}
+	resources, err := resource.New(
+		context.Background(),
+		resource.WithAttributes(
+			attribute.String("service.name", serviceName),
+			attribute.String("library.language", "go"),
+		),
+	)
+	if err != nil {
+		log.Fatalf("Could not set resources: %v", err)
+	}
+
+	otel.SetTracerProvider(
+		sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(sdktrace.AlwaysSample()),
+			sdktrace.WithBatcher(exporter),
+			sdktrace.WithResource(resources),
+		),
+	)
+	return exporter.Shutdown
+}
+
+// func initMeter() (*sdkmetric.MeterProvider, error) {
+// 	exp, err := stdoutmetric.New()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp)))
+// 	otel.SetMeterProvider(mp)
+// 	return mp, nil
+// }
 
 var rootCmd = &cobra.Command{
 	Use:   "k8s-auto-arch",
@@ -35,6 +96,9 @@ var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+
+		stopTracer := initTracer()
+		defer stopTracer(ctx)
 
 		return runWebhookServer(ctx)
 	},
@@ -55,10 +119,11 @@ func init() {
 	rootCmd.PersistentFlags().AddGoFlagSet(fs)
 
 	rootCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on for HTTPS traffic")
+	rootCmd.PersistentFlags().StringVar(&collectorURL, "otlp_collector", "", "Set the open telemetry collector URI")
 }
 
 func runWebhookServer(ctx context.Context) error {
-	http.HandleFunc("/", controller.HandleRequest)
+	http.Handle("/", otelhttp.NewHandler(http.HandlerFunc(controller.HandleRequest), "root"))
 	server := http.Server{
 		Addr:     fmt.Sprintf(":%d", port),
 		ErrorLog: klog.NewStandardLogger("ERROR"),

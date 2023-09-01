@@ -19,6 +19,7 @@ spec:
           args:
           - --logtostderr=true
           - -v=3
+          - --otlp_collector=my-release-signoz-otel-collector.signoz:4317
           image: cr.local.ongy.net/ongy/k8s-auto-arch:latest
           imagePullPolicy: Always
           ports:

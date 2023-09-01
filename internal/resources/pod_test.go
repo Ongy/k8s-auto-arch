@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestContainerArchitectures(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			test.UseTestRegistry(map[test.ImageInfo][]string{{Organization: "org", Image: "image"}: testCase.expected})
-			arches, err := containerArchitectures(testCase.input)
+			arches, err := containerArchitectures(context.Background(), testCase.input)
 			if err != nil {
 				t.Fatalf("Failed to get container architectures: %v", err)
 			}
@@ -165,7 +166,7 @@ func TestArchitectures(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			doContainerArchitectures = func(imgName string) (map[string]bool, error) {
+			doContainerArchitectures = func(_ context.Context, imgName string) (map[string]bool, error) {
 				arches, ok := testCase.arches[imgName]
 				if !ok {
 					return nil, fmt.Errorf("couldn't find container")
@@ -180,7 +181,7 @@ func TestArchitectures(t *testing.T) {
 			}
 
 			want := testCase.expected
-			got, err := Architectures(&testCase.input)
+			got, err := Architectures(context.Background(), &testCase.input)
 			if err != nil {
 				t.Errorf("Failed call to Architectures: %v", err)
 				return

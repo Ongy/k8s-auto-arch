@@ -1,10 +1,14 @@
 package resources
 
 import (
+	"context"
 	"fmt"
 
 	regname "github.com/google/go-containerregistry/pkg/name"
 	registry "github.com/google/go-containerregistry/pkg/v1/remote"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/ongy/k8s-auto-arch/internal/util"
@@ -15,7 +19,10 @@ var (
 	doContainerArchitectures = containerArchitectures
 )
 
-func containerArchitectures(refString string) (map[string]bool, error) {
+func containerArchitectures(ctx context.Context, refString string) (map[string]bool, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "containerArchitectures", trace.WithAttributes(attribute.String("container", refString)))
+	defer span.End()
+
 	ref, err := regname.ParseReference(refString)
 	if err != nil {
 		return map[string]bool{}, fmt.Errorf("parse image reference: %w", err)
@@ -49,10 +56,13 @@ func containerArchitectures(refString string) (map[string]bool, error) {
 	return aggregator, nil
 }
 
-func Architectures(pod *corev1.Pod) ([]string, error) {
+func Architectures(ctx context.Context, pod *corev1.Pod) ([]string, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "Architectures")
+	defer span.End()
+
 	var podArches map[string]bool
 	for _, container := range pod.Spec.Containers {
-		arches, err := doContainerArchitectures(container.Image)
+		arches, err := doContainerArchitectures(ctx, container.Image)
 		if err != nil {
 			return []string{}, fmt.Errorf("get arches of container '%s': %w", container.Name, err)
 		}
@@ -61,7 +71,7 @@ func Architectures(pod *corev1.Pod) ([]string, error) {
 	}
 
 	for _, container := range pod.Spec.InitContainers {
-		arches, err := doContainerArchitectures(container.Image)
+		arches, err := doContainerArchitectures(ctx, container.Image)
 		if err != nil {
 			return []string{}, fmt.Errorf("get arches of initContainer '%s': %w", container.Name, err)
 		}

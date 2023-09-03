@@ -12,7 +12,7 @@ spec:
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: librespeed
+  name: k8s-auto-arch
 spec:
   gateways: [istio-system/gateway]
   hosts: [mutate.local.ongy.net]

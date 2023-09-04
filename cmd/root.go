@@ -23,8 +23,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	goflags "flag"
-
 	"github.com/spf13/cobra"
 
 	"golang.org/x/exp/slog"

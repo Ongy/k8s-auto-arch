@@ -87,7 +87,7 @@ func TestHandleRequest(t *testing.T) {
 	}{
 		{
 			name:   "simple",
-			arches: map[test.ImageInfo][]string{test.ImageInfo{"org", "image"}: {"amd64"}},
+			arches: map[test.ImageInfo][]string{{Organization: "org", Image: "image"}: {"amd64"}},
 			input: v1.Pod{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -126,7 +126,7 @@ func TestHandleRequest(t *testing.T) {
 		},
 		{
 			name:   "skip",
-			arches: map[test.ImageInfo][]string{test.ImageInfo{"org", "image"}: {"amd64"}},
+			arches: map[test.ImageInfo][]string{{Organization: "org", Image: "image"}: {"amd64"}},
 			input: v1.Pod{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{

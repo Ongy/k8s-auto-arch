@@ -7,10 +7,10 @@ import (
 	"os"
 
 	"go.opentelemetry.io/otel"
+	"golang.org/x/exp/slog"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/klog/v2"
 
 	"github.com/ongy/k8s-auto-arch/internal/resources"
 )
@@ -94,9 +94,9 @@ func ReviewPod(ctx context.Context, request *v1.AdmissionRequest) (*admissionv1.
 	if patch != "" {
 		admissionResponse.PatchType = &patchType
 		admissionResponse.Patch = []byte(patch)
-		klog.V(3).InfoS("Annotating pod")
+		slog.InfoContext(ctx, "Annotating pod")
 	} else {
-		klog.V(4).InfoS("Skipping pod")
+		slog.DebugContext(ctx, "Skipping pod")
 	}
 
 	return admissionResponse, nil

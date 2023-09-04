@@ -27,7 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"k8s.io/klog/v2"
+	"golang.org/x/exp/slog"
 )
 
 const serviceName = "ks-auto-arch.ongy.net"
@@ -110,7 +110,10 @@ var rootCmd = &cobra.Command{
 		return runWebhookServer(ctx)
 	},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		klog.V(3).InfoS("Starting k8s-auto-arch", "version", gitDescribe)
+		handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{AddSource: true})
+		slog.SetDefault(slog.New(handler))
+
+		slog.InfoContext(cmd.Context(), "Starting k8s-auto-arch", "version", gitDescribe)
 	},
 }
 
@@ -121,10 +124,6 @@ func Execute() {
 }
 
 func init() {
-	fs := goflags.NewFlagSet("", goflags.PanicOnError)
-	klog.InitFlags(fs)
-	rootCmd.PersistentFlags().AddGoFlagSet(fs)
-
 	rootCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on for HTTPS traffic")
 	rootCmd.PersistentFlags().StringVar(&collectorURL, "otlp_collector", "", "Set the open telemetry collector URI")
 }
@@ -133,14 +132,14 @@ func runWebhookServer(ctx context.Context) error {
 	http.Handle("/", otelhttp.NewHandler(http.HandlerFunc(controller.HandleRequest), "root"))
 	server := http.Server{
 		Addr:     fmt.Sprintf(":%d", port),
-		ErrorLog: klog.NewStandardLogger("ERROR"),
+		ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
 	}
 
 	go func() {
 		<-ctx.Done()
 
 		if err := server.Shutdown(context.Background()); err != nil {
-			klog.V(2).InfoS("Failed to shutdown server", "err", err, "port", port)
+			slog.ErrorContext(ctx, "Failed to shutdown server", "err", err, "port", port)
 		}
 	}()
 

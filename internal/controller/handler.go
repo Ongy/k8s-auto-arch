@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"go.opentelemetry.io/otel"
+	"golang.org/x/exp/slog"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2"
 )
 
 func admissionReviewFromRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
@@ -34,7 +34,7 @@ func admissionReviewFromRequest(r *http.Request) (*admissionv1.AdmissionReview, 
 }
 
 func HandleRequest(w http.ResponseWriter, r *http.Request) {
-	klog.V(4).InfoS("Handling request", "client", r.RemoteAddr)
+	slog.DebugContext(r.Context(), "Handling request", "client", r.RemoteAddr)
 	// Parse the AdmissionReview from the http request.
 	admissionReviewRequest, err := admissionReviewFromRequest(r)
 	if err != nil {
@@ -49,14 +49,15 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	podResource := metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 	if admissionReviewRequest.Request.Resource != podResource {
 		// While this isn't a big problem for the application, it's a warning level report of misconfiguration
-		klog.V(2).InfoS("Got incompatible resource", "client", r.RemoteAddr, "resource", admissionReviewRequest.Request.Resource)
+
+		slog.ErrorContext(r.Context(), "Got incompatible resource", "client", r.RemoteAddr, "resource", admissionReviewRequest.Request.Resource)
 		http.Error(w, "Incompatible resource", http.StatusBadRequest)
 		return
 	}
 
 	admissionResponse, err := ReviewPod(r.Context(), admissionReviewRequest.Request)
 	if err != nil {
-		klog.V(2).InfoS("Failed to review resource", "err", err, "client", r.RemoteAddr)
+		slog.ErrorContext(r.Context(), "Failed to review resource", "err", err, "client", r.RemoteAddr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -69,6 +70,7 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := json.Marshal(admissionReviewResponse)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "Error marshalling respons to json", "err", err)
 		msg := fmt.Sprintf("error marshalling response json: %v", err)
 		http.Error(w, msg, http.StatusInternalServerError)
 		return

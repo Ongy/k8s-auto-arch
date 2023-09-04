@@ -8,9 +8,13 @@ require (
 	github.com/spf13/cobra v1.7.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.43.0
 	go.opentelemetry.io/otel v1.17.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.40.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.17.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.17.0
+	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v0.40.0
 	go.opentelemetry.io/otel/sdk v1.17.0
+	go.opentelemetry.io/otel/sdk/metric v0.40.0
+	go.opentelemetry.io/otel/trace v1.17.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	k8s.io/api v0.28.1
 	k8s.io/apimachinery v0.28.1
@@ -43,13 +47,13 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/vbatts/tar-split v0.11.5 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.40.0 // indirect
 	go.opentelemetry.io/otel/metric v1.17.0 // indirect
-	go.opentelemetry.io/otel/trace v1.17.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.0.0 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/grpc v1.57.0 // indirect

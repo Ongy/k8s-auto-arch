@@ -15,8 +15,11 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+
+	metricexporter "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -73,16 +76,16 @@ func initTracer() func(context.Context) error {
 	return exporter.Shutdown
 }
 
-// func initMeter() (*sdkmetric.MeterProvider, error) {
-// 	exp, err := stdoutmetric.New()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp)))
-// 	otel.SetMeterProvider(mp)
-// 	return mp, nil
-// }
+func initMeter(ctx context.Context) (*sdkmetric.MeterProvider, error) {
+	exp, err := metricexporter.New(ctx, metricexporter.WithInsecure(), metricexporter.WithEndpoint(collectorURL))
+	if err != nil {
+		return nil, err
+	}
+
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp)))
+	otel.SetMeterProvider(mp)
+	return mp, nil
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "k8s-auto-arch",
@@ -96,6 +99,10 @@ var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+
+		if _, err := initMeter(ctx); err != nil {
+			return fmt.Errorf("initMeter: %w", err)
+		}
 
 		stopTracer := initTracer()
 		defer stopTracer(ctx)

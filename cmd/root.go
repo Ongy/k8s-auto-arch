@@ -33,6 +33,8 @@ const serviceName = "ks-auto-arch.ongy.net"
 var (
 	gitDescribe  string
 	collectorURL = ""
+	tlsKey       = ""
+	tlsCert      = ""
 
 	port int
 )
@@ -98,12 +100,14 @@ var rootCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		if _, err := initMeter(ctx); err != nil {
-			return fmt.Errorf("initMeter: %w", err)
-		}
+		if collectorURL != "" {
+			if _, err := initMeter(ctx); err != nil {
+				return fmt.Errorf("initMeter: %w", err)
+			}
 
-		stopTracer := initTracer()
-		defer stopTracer(ctx)
+			stopTracer := initTracer()
+			defer stopTracer(ctx)
+		}
 
 		return runWebhookServer(ctx)
 	},
@@ -124,6 +128,9 @@ func Execute() {
 func init() {
 	rootCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on for HTTPS traffic")
 	rootCmd.PersistentFlags().StringVar(&collectorURL, "otlp_collector", "", "Set the open telemetry collector URI")
+
+	rootCmd.PersistentFlags().StringVar(&tlsKey, "tls-key", "", "")
+	rootCmd.PersistentFlags().StringVar(&tlsCert, "tls-crt", "", "")
 }
 
 func runWebhookServer(ctx context.Context) error {
@@ -141,9 +148,18 @@ func runWebhookServer(ctx context.Context) error {
 		}
 	}()
 
-	if err := server.ListenAndServe(); err != nil {
-		if !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("ListenAndServe: %w", err)
+	if tlsKey != "" {
+		if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil {
+			if !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("ListenAndServeTLs: %w", err)
+			}
+		}
+
+	} else {
+		if err := server.ListenAndServe(); err != nil {
+			if !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("ListenAndServe: %w", err)
+			}
 		}
 	}
 

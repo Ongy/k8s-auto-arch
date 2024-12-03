@@ -2,15 +2,16 @@ kind: MutatingWebhookConfiguration
 apiVersion: admissionregistration.k8s.io/v1
 metadata:
   name: pod-label-add
+  annotations:
+    cert-manager.io/inject-ca-from: kube-system/k8s-auto-arch-certificate
 webhooks:
   - name: pod-label-add.trstringer.com
     failurePolicy: Ignore
     clientConfig:
-      url: https://mutate.local.ongy.net/k8s-auto-arch
-#      service:
-#        namespace: default
-#        name: mutating-webhook
-#        path: /mutate
+      service:
+        namespace: kube-system
+        name: k8s-auto-arch
+        path: /mutate
     rules:
       - apiGroups: [""]
         apiVersions: ["v1"]

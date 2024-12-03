@@ -12,15 +12,22 @@ spec:
       labels:
         app: k8s-auto-arch
     spec:
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      volumes:
+      - name: tls-cert
+        secret:
+          secretName: k8s-auto-arch
       containers:
         - name: mutating-webhook
           command:
           - /k8s-auto-arch
           args:
-          - --logtostderr=true
-          - -v=3
-          - --otlp_collector=my-release-signoz-otel-collector.signoz:4317
-          image: cr.local.ongy.net/ongy/k8s-auto-arch:latest
+          - --tls-key=/tls/tls.key
+          - --tls-crt=/tls/tls.crt
+          image: cr.local.ongy.net/ongy/k8s-auto-arch:arm64
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -35,3 +42,7 @@ spec:
             readOnlyRootFilesystem: true
             runAsUser: 10001
             runAsGroup: 10001
+          volumeMounts:
+          - name: tls-cert
+            mountPath: /tls/
+            readOnly: true
